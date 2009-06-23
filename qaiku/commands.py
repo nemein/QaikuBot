@@ -58,8 +58,22 @@ class default(Command):
     def __init__(self, parent):
         super(default, self).__init__(parent)
     
+    # Publish a new Qaiku
     def run(self, message, *args):
-        self.reply("This is the default command called with '%s'" % message.body)
+        apikey = self.get_apikey()
+        if apikey is None:
+            print "No API key for user %s" % (self.sender_jid,)
+            return None
+            
+        opener = urllib2.build_opener()
+        opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
+        try:
+            data = urllib.urlencode({'status': message.body})
+            params = urllib.urlencode({'apikey': apikey})
+            url = 'http://www.qaiku.com/api/statuses/update.json?%s' % params
+            req = opener.open(url, data)
+        except urllib2.HTTPError, e:
+            print "Updating failed for user %s, HTTP %s" % (self.sender_jid, e.code)
 
 class FOLLOW(Command):
     def __init__(self, parent):
@@ -122,9 +136,9 @@ class FOLLOW(Command):
                         print url
                     else:
                         req = opener.open('http://www.qaiku.com/api/statuses/friends_timeline.json?apikey=%s' % apikey)
-                    # TODO: since
                 except urllib2.HTTPError:
                     # Authorization failed for user, complain?
+                    # TODO: deactivate all subscriptions for the user until he reauthorizes
                     print "Authorization failed for user %s with API key %s" % (jid,apikey)
                     continue
 
@@ -171,16 +185,25 @@ class AUTHORIZE(Command):
         opener = urllib2.build_opener()
         opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
         try:
-            req = opener.open('http://www.qaiku.com/api/statuses/user_timeline.json?apikey=%s' % args[0])
+            params = urllib.urlencode({'apikey': args[0]})
+            url = 'http://www.qaiku.com/api/statuses/user_timeline.json?%s' % params
+            print url
+            req = opener.open(url)
         except urllib2.HTTPError:
             self.reply('Sorry, authorization failed.')
             return None
-        reply = json.loads(req.read())
+        
+        results = req.read() 
+        try:
+            reply = json.loads(results)
+        except ValueError:
+            self.reply('Sorry, authorization failed. Qaiku returned invalid data.')
+            print results
+            return None
         
         apikey = self.get_apikey()
         
         # If we already have a user, update their apikey, otherwise create a new record.
-        # TODO: Clean the args[0] from sql injections
         if apikey is not None:
             if apikey == args[0]:
                 self.reply('No action taken.')
@@ -193,4 +216,5 @@ class AUTHORIZE(Command):
             self.reply('Welcome %(username)s. Authorization successful!' % {'username': reply[0]['user']['name'] })
             values = (reply[0]['user']['name'], self.sender_jid, args[0])
             self.cursor.execute("INSERT INTO qaikubot_authorize (name, jid, apikey) VALUES (?, ?, ?)", values)
+            # TODO: Activate all FOLLOWs of the user in case they were deactivated earlier
             self.connection.commit()
