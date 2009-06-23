@@ -45,7 +45,7 @@ class BotMessage(xmppim.MessageProtocol):
             self.commands[key].loop()
 
     def execcmd(self, command, msg, *args):
-        command = self.commands.get(command, commands.default)
+        command = self.commands.get(command, self.commands['default'])
         command.sender = msg['from']
         command.sender_jid = msg['from'].rsplit('/')[0]
         command.run(msg, *args)

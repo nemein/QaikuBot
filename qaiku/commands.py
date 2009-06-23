@@ -59,7 +59,7 @@ class default(Command):
         super(default, self).__init__(parent)
     
     def run(self, message, *args):
-        self.reply("This is the default command")
+        self.reply("This is the default command called with '%s'" % message.body)
 
 class FOLLOW(Command):
     def __init__(self, parent):
