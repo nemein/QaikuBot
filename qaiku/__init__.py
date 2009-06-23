@@ -35,7 +35,7 @@ class BotMessage(xmppim.MessageProtocol):
                 continue
         self.help = "\n".join(self.help)
         loop = LoopingCall(self.loop)
-        loop.start(10, False)
+        loop.start(20, False)
         
     def connectionMade(self):
         super(BotMessage, self).connectionMade()

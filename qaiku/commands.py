@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import urllib, urllib2
 import simplejson as json
+import locale, mx.DateTime
 from datetime import datetime
 from time import gmtime, mktime
 
@@ -129,11 +130,23 @@ class FOLLOW(Command):
 
                 messages = json.loads(req.read())
                 messages.reverse()
+                latestupdate = last_updated
                 for message in messages:
                     messageformatted = "%s: %s" % (message['user']['screen_name'], message['text'])
+                    
+                    # TODO: There must be a more elegant way for parsing the funky date format
+                    loc = locale.getlocale(locale.LC_TIME)
+                    locale.setlocale(locale.LC_TIME, 'C')
+                    createdat = int(mx.DateTime.Parser.DateTimeFromString(message['created_at']))
+                    locale.setlocale(locale.LC_TIME, loc)
+                    
+                    if createdat > latestupdate:
+                        # We use timestamp from the messages in order to avoid gaps due to Qaiku and local machine being in different time
+                        latestupdate = createdat
+
                     self.send(jid, messageformatted)
-                # TODO: update last_updated to current time
-                values = (int(mktime(gmtime())), jid)
+
+                values = (latestupdate, jid)
                 self.cursor.execute("UPDATE qaikubot_follow SET last_updated = ? WHERE jid = ?", values)
                 self.connection.commit()
                 continue
