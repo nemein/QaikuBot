@@ -68,7 +68,7 @@ class default(Command):
         opener = urllib2.build_opener()
         opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
         try:
-            data = urllib.urlencode({'status': message.body})
+            data = urllib.urlencode({'status': unicode(message.body).encode('utf-8')})
             params = urllib.urlencode({'apikey': apikey})
             url = 'http://www.qaiku.com/api/statuses/update.json?%s' % params
             req = opener.open(url, data)
