@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 import urllib, urllib2
 import simplejson as json
-import locale, mx.DateTime
 from datetime import datetime
-from time import gmtime, mktime
+from time import gmtime, mktime, strptime
 
 # Basic command structure is as follows:
 # class COMMAND_NAME_IN_CAPS(Command): - extend the base command class
@@ -85,7 +84,7 @@ class FOLLOW(Command):
         
     def run(self, message, *args):
         if not args or not args[0]:
-            self.reply('No follow target given.')
+            self.reply('No FOLLOW target given.')
             return None
         
         # See if this already exists
@@ -149,20 +148,19 @@ class FOLLOW(Command):
                     messageformatted = "%s: %s" % (message['user']['screen_name'], message['text'])
                     
                     # TODO: There must be a more elegant way for parsing the funky date format
-                    loc = locale.getlocale(locale.LC_TIME)
-                    locale.setlocale(locale.LC_TIME, 'C')
-                    createdat = int(mx.DateTime.Parser.DateTimeFromString(message['created_at']))
-                    locale.setlocale(locale.LC_TIME, loc)
+                    createdat = int(mktime(strptime(message['created_at'], '%a %b %d %H:%M:%S +0000 %Y')))
                     
                     if createdat > latestupdate:
                         # We use timestamp from the messages in order to avoid gaps due to Qaiku and local machine being in different time
                         latestupdate = createdat
 
                     self.send(jid, messageformatted)
-
+                    
                 values = (latestupdate, jid)
                 self.cursor.execute("UPDATE qaikubot_follow SET last_updated = ? WHERE jid = ?", values)
                 self.connection.commit()
+                continue
+            elif follow_type.startswith('@'):
                 continue
             else:
                 print "Not fetching FOLLOWed %s to %s as it is not implemented yet" % (follow_type, jid)
@@ -171,6 +169,27 @@ class FOLLOW(Command):
         self.offset += self.recordsperloop
         if self.offset > self.recordcount:
             self.offset = 0
+
+class UNFOLLOW(Command):
+    def __init__(self, parent):
+        super(UNFOLLOW, self).__init__(parent)
+    
+    def run(self, message, *args):
+        if not args or not args[0]:
+            self.reply('No UNFOLLOW target given.')
+            return None
+        
+        values = (self.sender_jid, args[0])
+        self.cursor.execute("SELECT last_updated FROM qaikubot_follow WHERE jid = ? AND follow_type = ?", values)
+        result = self.cursor.fetchone()
+        
+        if result is not None:
+            values = (self.sender_jid, args[0])
+            self.cursor.execute('DELETE FROM qaikubot_follow WHERE jid = ? AND follow_type = ?', values)
+            self.connection.commit()
+            self.reply('Quit following %s for you' % (args[0],))
+        else:
+            self.reply('You are not following %s' % (args[0],))
 
 class AUTHORIZE(Command):
     def __init__(self, parent):
