@@ -12,7 +12,8 @@ from qaiku import commands
 from sqlite3 import dbapi2 as sqlite
 from markdown2 import markdown
 
-USAGE = ()
+USAGE = []
+IGNORED_CMDS = ('Command','datetime','time')
 
 class BotMessage(xmppim.MessageProtocol):
     def __init__(self, jid):
@@ -24,17 +25,16 @@ class BotMessage(xmppim.MessageProtocol):
         # Only get classes from commands file
         for (name, klass) in inspect.getmembers(commands, inspect.isclass):
             # If we are not dealing with the "baseclass"
-            if name not in ('Command','datetime','time'):
+            if name not in IGNORED_CMDS:
                 # Instanciate the class so we have a bound method
                 instance = klass(self)
                 self.commands[name] = instance
                 # If the class is listed in commands with usage
-                if name in USAGE:
-                    if hasattr(klass, 'usage'):
-                        self.help.append("%s %s" % (name, klass.usage))
+                if hasattr(instance, 'usage'):
+                    USAGE.append(instance.usage)
             else:
                 continue
-        self.help = "\n".join(self.help)
+        self.help = "\n\n".join(USAGE)
         loop = LoopingCall(self.loop)
         loop.start(20, False)
         
@@ -76,7 +76,6 @@ class BotMessage(xmppim.MessageProtocol):
         
 class BotPresence(xmppim.PresenceClientProtocol):
     def __init__(self, jid):
-        """docstring for __init__"""
         self.jid = jid
     
     def connectionMade(self):
@@ -85,3 +84,29 @@ class BotPresence(xmppim.PresenceClientProtocol):
     def availableReceived(self, entity, show=None, statuses=None, priority=0):
         if self.jid != entity.userhostJID():
             self.available(entity=entity)
+    
+    def subscribedReceived(self, entity):
+        print "subscribedReceived - %s" % (entity,)
+        self.subscribed(entity=entity)
+        jid = entity.userhost()
+        msg = domish.Element((None, "message"))
+        msg['to'] = jid
+        msg['from'] = self.jid.full()
+        msg['type'] = 'chat'
+        msg.addUniqueId()
+        reply = """Hello there!\n\nYou are receiving this message, because you have just added me as your buddy.\n\nI would like to inform you that the commands which I accept are as follows:"""
+        cmds = "\n\n".join(USAGE)
+        msg.addElement('body', content="%s\n\n%s" % (reply, cmds))
+        self.send(msg)
+    
+    def unsubscribedReceived(self, entity):
+        print "unsubscribedReceived - %s" % (entity,)
+        self.unsubscribed(entity)
+        
+    def subscribeReceived(self, entity):
+        print "subscribeReceived - %s" % (entity,)
+        self.subscribe(entity)
+        
+    def unsubscribeReceived(self, entity):
+        print "unsubscribeReceived - %s" % (entity,)
+        self.unsubscribe(entity)
