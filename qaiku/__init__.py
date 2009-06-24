@@ -10,6 +10,7 @@ from wokkel import client, xmppim, component
 
 from qaiku import commands
 from sqlite3 import dbapi2 as sqlite
+from markdown2 import markdown
 
 USAGE = ()
 
@@ -58,6 +59,9 @@ class BotMessage(xmppim.MessageProtocol):
         msg['type'] = 'chat'
         msg.addUniqueId()
         msg.addElement('body', content=content)
+        body = domish.Element((None, 'body'))
+        body.addRawXml(markdown(content))
+        msg.addElement('html', defaultUri='http://jabber.org/protocol/xhtml-im', content=body)
         self.send(msg)
     
     def onMessage(self, msg):

@@ -91,17 +91,35 @@ class FOLLOW(Command):
         values = (self.sender_jid, args[0])
         self.cursor.execute("SELECT last_updated FROM qaikubot_follow WHERE jid = ? AND follow_type = ?", values)
         result = self.cursor.fetchone()
+        apikey = self.get_apikey(self.sender_jid)
+        follow_type = args[0]
 
         if result is not None:
             # Follow already exists, do nothing.
             pass
         else:
-            if args[0] == 'stream':
+            if follow_type == 'stream':
                 self.reply('Following stream')
-            elif args[0].startswith('#'):
+            elif follow_type.startswith('#'):
                 self.reply('Following channel %s' % args[0])
-            elif args[0].startswith('@'):
-                self.reply('Following user %s' % args[0])
+            elif follow_type.startswith('@'):
+                opener = urllib2.build_opener()
+                opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
+                try:
+                    params = urllib.urlencode({'apikey': apikey, 'screen_name': follow_type[1:]})
+                    url = 'http://www.qaiku.com/api/statuses/user_timeline.json?%s' % params
+                    req = opener.open(url)
+                except urllib2.HTTPError:
+                    # Authorization failed for user, complain?
+                    # TODO: deactivate all subscriptions for the user until he reauthorizes
+                    self.reply('User %s does not exist.' % follow_type[1:])
+                    return None
+                    
+                if req.read() == '[]':
+                    self.reply("%s's feed is private and therefore cannot be followed." % (follow_type[1:],))
+                    return None
+                else:
+                    self.reply('Following %s' % follow_type[1:])
             else:
                 # Do nothing
                 self.reply('Unknown follow target, ignoring.')
@@ -114,13 +132,20 @@ class FOLLOW(Command):
     def loop(self):        
         self.cursor.execute("SELECT follow_type, jid, last_updated FROM qaikubot_follow ORDER BY id ASC LIMIT %d OFFSET %d" % (self.recordsperloop, self.offset))
         results = self.cursor.fetchall()
-
+        
+        user_messages = {}
+        
         for follow_type, jid, last_updated in results:
             print "Looping FOLLOW %s for user %s" % (follow_type, jid)
             apikey = self.get_apikey(jid)
             if apikey is None:
                 print "No API key for user %s" % (jid,)
                 continue
+            
+            if jid not in user_messages:
+                user_messages[jid] = {}
+                user_messages[jid]['messages'] = {}
+                user_messages[jid]['order'] = []
             
             if follow_type == 'stream':
                 opener = urllib2.build_opener()
@@ -153,19 +178,66 @@ class FOLLOW(Command):
                     if createdat > latestupdate:
                         # We use timestamp from the messages in order to avoid gaps due to Qaiku and local machine being in different time
                         latestupdate = createdat
-
-                    self.send(jid, messageformatted)
                     
-                values = (latestupdate, jid)
-                self.cursor.execute("UPDATE qaikubot_follow SET last_updated = ? WHERE jid = ?", values)
+                    if message['id'] not in user_messages[jid]['messages']:
+                        user_messages[jid]['messages'][message['id']] = messageformatted
+                        user_messages[jid]['order'].append((createdat, message['id']))
+                    # self.send(jid, messageformatted)
+                    
+                values = (latestupdate, jid, follow_type)
+                self.cursor.execute("UPDATE qaikubot_follow SET last_updated = ? WHERE jid = ? AND follow_type = ?", values)
                 self.connection.commit()
-                continue
             elif follow_type.startswith('@'):
-                continue
+                opener = urllib2.build_opener()
+                opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
+                try:
+                    if last_updated is not None:
+                        in_datetime = datetime.fromtimestamp(last_updated)
+                        since = in_datetime.strftime('%Y-%m-%d %H:%M:%S')
+                        params = urllib.urlencode({'apikey': apikey, 'screen_name': follow_type[1:], 'since': since})
+                        url = 'http://www.qaiku.com/api/statuses/user_timeline.json?%s' % params
+                        req = opener.open(url)
+                        print url
+                    else:
+                        params = urllib.urlencode({'apikey': apikey, 'screen_name': follow_type[1:]})
+                        url = 'http://www.qaiku.com/api/statuses/user_timeline.json?%s' % params
+                        req = opener.open(url)
+                except urllib2.HTTPError:
+                    # Authorization failed for user, complain?
+                    # TODO: deactivate all subscriptions for the user until he reauthorizes
+                    print "Authorization failed for user %s with API key %s" % (jid,apikey)
+                    continue
+
+                messages = json.loads(req.read())
+                messages.reverse()
+                latestupdate = last_updated
+                for message in messages:
+                    messageformatted = "%s: %s" % (message['user']['screen_name'], message['text'])
+                    
+                    createdat = int(mktime(strptime(message['created_at'], '%a %b %d %H:%M:%S +0000 %Y')))
+                    
+                    if createdat > latestupdate:
+                        # We use timestamp from the messages in order to avoid gaps due to Qaiku and local machine being in different time
+                        latestupdate = createdat
+
+                    if message['id'] not in user_messages[jid]['messages']:
+                        user_messages[jid]['messages'][message['id']] = messageformatted
+                        user_messages[jid]['order'].append((createdat, message['id']))
+                    # self.send(jid, messageformatted)
+                    
+                values = (latestupdate, jid, follow_type)
+                self.cursor.execute("UPDATE qaikubot_follow SET last_updated = ? WHERE jid = ? AND follow_type = ?", values)
+                self.connection.commit()
             else:
                 print "Not fetching FOLLOWed %s to %s as it is not implemented yet" % (follow_type, jid)
                 continue
-
+        
+        for user in user_messages:
+            for item in sorted(user_messages[user]['order']):
+                self.send(user, user_messages[user]['messages'][item[1]])
+#            for msg in user_messages[user]:
+#                self.send(user, user_messages[user][msg])
+            
         self.offset += self.recordsperloop
         if self.offset > self.recordcount:
             self.offset = 0
