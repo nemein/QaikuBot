@@ -59,6 +59,52 @@ class default(Command):
     def __init__(self, parent):
         super(default, self).__init__(parent)
     
+    def run(self, message, *args):
+        apikey = self.get_apikey()
+        if apikey is None:
+            print "No API key for user %s" % (self.sender_jid,)
+            return None
+        # elif not args or not args[0]:
+        #     self.reply('No message given.')
+        #     return None
+        
+        msg = unicode(message.body)
+
+        if msg.startswith('@'):
+            cmdargs = msg.split()
+            username = cmdargs[0]
+            try:
+                user = LAST_MSGS[self.sender_jid]
+            except KeyError:
+                self.reply("It appears I have no recollection of Qaikus you have received before, so I am sending your message along as new Qaiku. You should start following something so I serve you better.")
+                self._publish(apikey, message.body)
+                return None
+
+            try:
+                as_reply_to = LAST_MSGS[self.sender_jid]['users'][username[1:]]
+            except KeyError:
+                self.reply("It appears I have no recollection of Qaikus from %s before, so I am sending your message along as new Qaiku." % username)
+                self._publish(apikey, msg)
+            
+            self._publish(apikey, msg, reply_to=as_reply_to)
+        else:
+            self._publish(apikey, msg)
+
+    def _publish(self, apikey, message, reply_to=None):
+        opener = urllib2.build_opener()
+        opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
+        try:
+            data = urllib.urlencode({'status': unicode(message).encode('utf-8')})
+            params = urllib.urlencode({'apikey': apikey})
+            if reply_to is not None:
+                data = urllib.urlencode({'status': unicode(message).encode('utf-8'), 'in_reply_to_status_id': reply_to })
+        
+            url = 'http://www.qaiku.com/api/statuses/update.json?%s' % params
+            req = opener.open(url, data)
+            response = req.read()
+        except urllib2.HTTPError, e:
+            print "Updating failed for user %s, HTTP %s" % (self.sender_jid, e.code)
+    
 class AUTHORIZE(Command):
     def __init__(self, parent):
         super(AUTHORIZE, self).__init__(parent)
@@ -106,59 +152,6 @@ class AUTHORIZE(Command):
             self.cursor.execute("INSERT INTO qaikubot_authorize (name, jid, apikey) VALUES (?, ?, ?)", values)
             # TODO: Activate all FOLLOWs of the user in case they were deactivated earlier
             self.connection.commit()
-
-class QAIKU(Command):
-    def __init__(self, parent):
-        super(QAIKU, self).__init__(parent)
-        self.usage = '"QAIKU text" will publish a Qaiku for you.'
-    
-    def run(self, message, *args):
-        apikey = self.get_apikey()
-        if apikey is None:
-            print "No API key for user %s" % (self.sender_jid,)
-            return None
-        elif not args or not args[0]:
-            self.reply('No message given.')
-            return None
-        
-        if args[0].startswith('@'):
-            try:
-                user = LAST_MSGS[self.sender_jid]
-            except KeyError:
-                self.reply("It appears I have no recollection of Qaikus you have received before, so I am sending your message along as new Qaiku. You should start following something so I serve you better.")
-                self._publish(apikey, message.body)
-                return None
-            
-            try:
-                as_reply_to = LAST_MSGS[self.sender_jid]['users'][args[0][1:]]
-            except KeyError:
-                self.reply("It appears I have no recollection of Qaikus from %s before, so I am sending your message along as new Qaiku." % args[0])
-                self._publish(apikey, message.body)
-            
-            self._publish(apikey, message.body, reply_to=as_reply_to, username=args[0])
-        else:
-            self._publish(apikey, message.body)
-
-    def _publish(self, apikey, message, reply_to=None, username=None):
-        if reply_to is None:
-            msg = unicode(message)[6:]
-        else:
-            start = len(username) + 7
-            msg = unicode(message)[start:]
-        
-        opener = urllib2.build_opener()
-        opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
-        try:
-            data = urllib.urlencode({'status': unicode(msg).encode('utf-8')})
-            params = urllib.urlencode({'apikey': apikey})
-            if reply_to is not None:
-                data = urllib.urlencode({'status': unicode(msg).encode('utf-8'), 'in_reply_to_status_id': reply_to })
-        
-            url = 'http://www.qaiku.com/api/statuses/update.json?%s' % params
-            req = opener.open(url, data)
-            response = req.read()
-        except urllib2.HTTPError, e:
-            print "Updating failed for user %s, HTTP %s" % (self.sender_jid, e.code)
  
 class FOLLOW(Command):
     def __init__(self, parent):
