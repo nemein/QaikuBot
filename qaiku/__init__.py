@@ -18,7 +18,6 @@ IGNORED_CMDS = ('Command','datetime','time')
 class BotMessage(xmppim.MessageProtocol):
     def __init__(self, jid):
         self.jid = jid
-        self.help = []
         self.connection = sqlite.connect('test.db')
         self.cursor = self.connection.cursor()
         self.commands = {}
@@ -34,7 +33,7 @@ class BotMessage(xmppim.MessageProtocol):
                     USAGE.append(instance.usage)
             else:
                 continue
-        self.help = "\n\n".join(USAGE)
+        self.help = "\n".join(USAGE)
         loop = LoopingCall(self.loop)
         loop.start(20, False)
         
@@ -52,16 +51,19 @@ class BotMessage(xmppim.MessageProtocol):
         command.run(msg, *args)
     
     # Helper for creating replies
-    def reply(self, jid, content):
+    def reply(self, jid, plaintext, markdownized=None):
         msg = domish.Element((None, "message"))
         msg['to'] = jid
         msg['from'] = self.jid.full()
         msg['type'] = 'chat'
         msg.addUniqueId()
-        msg.addElement('body', content=content)
-        body = domish.Element((None, 'body'))
-        body.addRawXml(markdown(content))
-        msg.addElement('html', defaultUri='http://jabber.org/protocol/xhtml-im', content=body)
+        msg.addElement('body', content=plaintext)
+        
+        if markdownized is not None:
+            body = domish.Element((None, 'body'))
+            body.addRawXml(markdown(markdownized).replace('\n', '<br/>'))
+            msg.addElement('html', defaultUri='http://jabber.org/protocol/xhtml-im', content=body)
+        
         self.send(msg)
     
     def onMessage(self, msg):
@@ -95,7 +97,7 @@ class BotPresence(xmppim.PresenceClientProtocol):
         msg['type'] = 'chat'
         msg.addUniqueId()
         reply = """Hello there!\n\nYou are receiving this message, because you have just added me as your buddy.\n\nI would like to inform you that the commands which I accept are as follows:"""
-        cmds = "\n\n".join(USAGE)
+        cmds = "\n".join(USAGE)
         msg.addElement('body', content="%s\n\n%s" % (reply, cmds))
         self.send(msg)
     

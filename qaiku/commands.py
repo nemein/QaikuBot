@@ -17,6 +17,7 @@ from time import gmtime, mktime, strptime
 # 
 #     def help(self):
 #         Return the help/usage message
+LAST_MSGS = {}
 
 class Command(object):
     def __init__(self, parent):
@@ -25,9 +26,10 @@ class Command(object):
         self.sender_jid = ''
         self.cursor = parent.cursor
         self.connection = parent.connection
+        LAST_MSGS = {}
     
-    def send(self, user, message):
-        self.parent.reply(user, message)
+    def send(self, user, plaintext, markdownized=None):
+        self.parent.reply(user, plaintext, markdownized)
     
     def reply(self, message):
         self.send(self.sender, message)
@@ -50,30 +52,13 @@ class Command(object):
     def loop(self):
         return None
     
-    def run(self):
-        self.reply("Command undefined")
+    def run(self, message, *args):
+        self.reply('Command undefined, try "HELP" for a listing of available commands.')
   
 class default(Command):
     def __init__(self, parent):
         super(default, self).__init__(parent)
     
-    # Publish a new Qaiku
-    def run(self, message, *args):
-        apikey = self.get_apikey()
-        if apikey is None:
-            print "No API key for user %s" % (self.sender_jid,)
-            return None
-            
-        opener = urllib2.build_opener()
-        opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
-        try:
-            data = urllib.urlencode({'status': unicode(message.body).encode('utf-8')})
-            params = urllib.urlencode({'apikey': apikey})
-            url = 'http://www.qaiku.com/api/statuses/update.json?%s' % params
-            req = opener.open(url, data)
-        except urllib2.HTTPError, e:
-            print "Updating failed for user %s, HTTP %s" % (self.sender_jid, e.code)
-
 class AUTHORIZE(Command):
     def __init__(self, parent):
         super(AUTHORIZE, self).__init__(parent)
@@ -122,6 +107,59 @@ class AUTHORIZE(Command):
             # TODO: Activate all FOLLOWs of the user in case they were deactivated earlier
             self.connection.commit()
 
+class QAIKU(Command):
+    def __init__(self, parent):
+        super(QAIKU, self).__init__(parent)
+        self.usage = '"QAIKU text" will publish a Qaiku for you.'
+    
+    def run(self, message, *args):
+        apikey = self.get_apikey()
+        if apikey is None:
+            print "No API key for user %s" % (self.sender_jid,)
+            return None
+        elif not args or not args[0]:
+            self.reply('No message given.')
+            return None
+        
+        if args[0].startswith('@'):
+            try:
+                user = LAST_MSGS[self.sender_jid]
+            except KeyError:
+                self.reply("It appears I have no recollection of Qaikus you have received before, so I am sending your message along as new Qaiku. You should start following something so I serve you better.")
+                self._publish(apikey, message.body)
+                return None
+            
+            try:
+                as_reply_to = LAST_MSGS[self.sender_jid]['users'][args[0][1:]]
+            except KeyError:
+                self.reply("It appears I have no recollection of Qaikus from %s before, so I am sending your message along as new Qaiku." % args[0])
+                self._publish(apikey, message.body)
+            
+            self._publish(apikey, message.body, reply_to=as_reply_to, username=args[0])
+        else:
+            self._publish(apikey, message.body)
+
+    def _publish(self, apikey, message, reply_to=None, username=None):
+        if reply_to is None:
+            msg = unicode(message)[6:]
+        else:
+            start = len(username) + 7
+            msg = unicode(message)[start:]
+        
+        opener = urllib2.build_opener()
+        opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
+        try:
+            data = urllib.urlencode({'status': unicode(msg).encode('utf-8')})
+            params = urllib.urlencode({'apikey': apikey})
+            if reply_to is not None:
+                data = urllib.urlencode({'status': unicode(msg).encode('utf-8'), 'in_reply_to_status_id': reply_to })
+        
+            url = 'http://www.qaiku.com/api/statuses/update.json?%s' % params
+            req = opener.open(url, data)
+            response = req.read()
+        except urllib2.HTTPError, e:
+            print "Updating failed for user %s, HTTP %s" % (self.sender_jid, e.code)
+ 
 class FOLLOW(Command):
     def __init__(self, parent):
         super(FOLLOW, self).__init__(parent)
@@ -129,7 +167,7 @@ class FOLLOW(Command):
         self.recordsperloop = 5
         self.offset = 0
         self.recordcount = 1
-        self.usage = '"FOLLOW target" adds the target (stream, @nickname) to your follow list, after which you start to receive their Qaikus.'
+        self.usage = '"FOLLOW target" adds the target (radar, stream, @nickname, #channel) to your follow list, after which you start to receive Qaikus from the target.'
         
     def run(self, message, *args):
         if not args or not args[0]:
@@ -147,8 +185,8 @@ class FOLLOW(Command):
             # Follow already exists, do nothing.
             pass
         else:
-            if follow_type == 'stream':
-                self.reply('Following stream')
+            if follow_type == 'stream' or follow_type == 'radar':
+                self.reply('Following %s' % (follow_type,))
             elif follow_type.startswith('#'):
                 self.reply('Following channel %s' % args[0])
             elif follow_type.startswith('@'):
@@ -181,7 +219,9 @@ class FOLLOW(Command):
     def loop(self):        
         self.cursor.execute("SELECT follow_type, jid, last_updated FROM qaikubot_follow ORDER BY id ASC LIMIT %d OFFSET %d" % (self.recordsperloop, self.offset))
         results = self.cursor.fetchall()
-        
+        self.cursor.execute("SELECT count(id) FROM qaikubot_follow")
+        self.recordcount = self.cursor.fetchone()[0]
+
         user_messages = {}
         
         for follow_type, jid, last_updated in results:
@@ -195,6 +235,10 @@ class FOLLOW(Command):
                 user_messages[jid] = {}
                 user_messages[jid]['messages'] = {}
                 user_messages[jid]['order'] = []
+            
+            if jid not in LAST_MSGS:
+                LAST_MSGS[jid] = {}
+                LAST_MSGS[jid]['users'] = {}
             
             if follow_type == 'stream':
                 opener = urllib2.build_opener()
@@ -219,7 +263,9 @@ class FOLLOW(Command):
                 messages.reverse()
                 latestupdate = last_updated
                 for message in messages:
-                    messageformatted = "%s: %s" % (message['user']['screen_name'], message['text'])
+                    markdown_username = self._link_to_msg(message)
+                    markdownized = "%s: %s" % (markdown_username, message['text'])
+                    plaintext = "%s: %s" % (message['user']['screen_name'], message['text'])
                     
                     # TODO: There must be a more elegant way for parsing the funky date format
                     createdat = int(mktime(strptime(message['created_at'], '%a %b %d %H:%M:%S +0000 %Y')))
@@ -229,9 +275,57 @@ class FOLLOW(Command):
                         latestupdate = createdat
                     
                     if message['id'] not in user_messages[jid]['messages']:
-                        user_messages[jid]['messages'][message['id']] = messageformatted
+                        user_messages[jid]['messages'][message['id']] = {'plaintext': plaintext, 'markdown': markdownized}
                         user_messages[jid]['order'].append((createdat, message['id']))
-                    # self.send(jid, messageformatted)
+                        if message['in_reply_to_status_id']:
+                            LAST_MSGS[jid]['users'][message['user']['screen_name']] = message['in_reply_to_status_id']
+                        else:
+                            LAST_MSGS[jid]['users'][message['user']['screen_name']] = message['id']
+                    
+                values = (latestupdate, jid, follow_type)
+                self.cursor.execute("UPDATE qaikubot_follow SET last_updated = ? WHERE jid = ? AND follow_type = ?", values)
+                self.connection.commit()
+            elif follow_type == 'radar':
+                opener = urllib2.build_opener()
+                opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
+                try:
+                    if last_updated is not None:
+                        in_datetime = datetime.fromtimestamp(last_updated)
+                        since = in_datetime.strftime('%Y-%m-%d %H:%M:%S')
+                        params = urllib.urlencode({'apikey': apikey, 'since': since})
+                        url = 'http://www.qaiku.com/api/statuses/mentions.json?%s' % params
+                        req = opener.open(url)
+                        print url
+                    else:
+                        req = opener.open('http://www.qaiku.com/api/statuses/mentions.json?apikey=%s' % apikey)
+                except urllib2.HTTPError:
+                    # Authorization failed for user, complain?
+                    # TODO: deactivate all subscriptions for the user until he reauthorizes
+                    print "Authorization failed for user %s with API key %s" % (jid,apikey)
+                    continue
+
+                messages = json.loads(req.read())
+                messages.reverse()
+                latestupdate = last_updated
+                for message in messages:
+                    markdown_username = self._link_to_msg(message)
+                    markdownized = "%s: %s" % (markdown_username, message['text'])
+                    plaintext = "%s: %s" % (message['user']['screen_name'], message['text'])
+                    
+                    # TODO: There must be a more elegant way for parsing the funky date format
+                    createdat = int(mktime(strptime(message['created_at'], '%a %b %d %H:%M:%S +0000 %Y')))
+                    
+                    if createdat > latestupdate:
+                        # We use timestamp from the messages in order to avoid gaps due to Qaiku and local machine being in different time
+                        latestupdate = createdat
+                    
+                    if message['id'] not in user_messages[jid]['messages']:
+                        user_messages[jid]['messages'][message['id']] = {'plaintext': plaintext, 'markdown': markdownized}
+                        user_messages[jid]['order'].append((createdat, message['id']))
+                        if message['in_reply_to_status_id']:
+                            LAST_MSGS[jid]['users'][message['user']['screen_name']] = message['in_reply_to_status_id']
+                        else:
+                            LAST_MSGS[jid]['users'][message['user']['screen_name']] = message['id']
                     
                 values = (latestupdate, jid, follow_type)
                 self.cursor.execute("UPDATE qaikubot_follow SET last_updated = ? WHERE jid = ? AND follow_type = ?", values)
@@ -261,7 +355,9 @@ class FOLLOW(Command):
                 messages.reverse()
                 latestupdate = last_updated
                 for message in messages:
-                    messageformatted = "%s: %s" % (message['user']['screen_name'], message['text'])
+                    markdown_username = self._link_to_msg(message)
+                    markdownized = "%s: %s" % (markdown_username, message['text'])
+                    plaintext = "%s: %s" % (message['user']['screen_name'], message['text'])
                     
                     createdat = int(mktime(strptime(message['created_at'], '%a %b %d %H:%M:%S +0000 %Y')))
                     
@@ -270,9 +366,58 @@ class FOLLOW(Command):
                         latestupdate = createdat
 
                     if message['id'] not in user_messages[jid]['messages']:
-                        user_messages[jid]['messages'][message['id']] = messageformatted
+                        user_messages[jid]['messages'][message['id']] = {'plaintext': plaintext, 'markdown': markdownized}
                         user_messages[jid]['order'].append((createdat, message['id']))
-                    # self.send(jid, messageformatted)
+                        if message['in_reply_to_status_id']:
+                            LAST_MSGS[jid]['users'][message['user']['screen_name']] = message['in_reply_to_status_id']
+                        else:
+                            LAST_MSGS[jid]['users'][message['user']['screen_name']] = message['id']
+                    
+                values = (latestupdate, jid, follow_type)
+                self.cursor.execute("UPDATE qaikubot_follow SET last_updated = ? WHERE jid = ? AND follow_type = ?", values)
+                self.connection.commit()
+            elif follow_type.startswith('#'):
+                opener = urllib2.build_opener()
+                opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
+                try:
+                    if last_updated is not None:
+                        in_datetime = datetime.fromtimestamp(last_updated)
+                        since = in_datetime.strftime('%Y-%m-%d %H:%M:%S')
+                        params = urllib.urlencode({'apikey': apikey, 'since': since})
+                        url = 'http://www.qaiku.com/api/statuses/channel_timeline/%s.json?%s' % (follow_type[1:], params)
+                        req = opener.open(url)
+                        print url
+                    else:
+                        params = urllib.urlencode({'apikey': apikey })
+                        url = 'http://www.qaiku.com/api/statuses/channel_timeline/%s.json?%s' % (follow_type[1:], params)
+                        req = opener.open(url)
+                except urllib2.HTTPError:
+                    # Authorization failed for user, complain?
+                    # TODO: deactivate all subscriptions for the user until he reauthorizes
+                    print "Authorization failed for user %s with API key %s" % (jid,apikey)
+                    continue
+
+                messages = json.loads(req.read())
+                messages.reverse()
+                latestupdate = last_updated
+                for message in messages:
+                    markdown_username = self._link_to_msg(message)
+                    markdownized = "%s: %s" % (markdown_username, message['text'])
+                    plaintext = "%s: %s" % (message['user']['screen_name'], message['text'])
+                    
+                    createdat = int(mktime(strptime(message['created_at'], '%a %b %d %H:%M:%S +0000 %Y')))
+                    
+                    if createdat > latestupdate:
+                        # We use timestamp from the messages in order to avoid gaps due to Qaiku and local machine being in different time
+                        latestupdate = createdat
+
+                    if message['id'] not in user_messages[jid]['messages']:
+                        user_messages[jid]['messages'][message['id']] = {'plaintext': plaintext, 'markdown': markdownized}
+                        user_messages[jid]['order'].append((createdat, message['id']))
+                        if message['in_reply_to_status_id']:
+                            LAST_MSGS[jid]['users'][message['user']['screen_name']] = message['in_reply_to_status_id']
+                        else:
+                            LAST_MSGS[jid]['users'][message['user']['screen_name']] = message['id']
                     
                 values = (latestupdate, jid, follow_type)
                 self.cursor.execute("UPDATE qaikubot_follow SET last_updated = ? WHERE jid = ? AND follow_type = ?", values)
@@ -283,13 +428,33 @@ class FOLLOW(Command):
         
         for user in user_messages:
             for item in sorted(user_messages[user]['order']):
-                self.send(user, user_messages[user]['messages'][item[1]])
+                self.send(user, user_messages[user]['messages'][item[1]]['plaintext'], user_messages[user]['messages'][item[1]]['markdown'])
 #            for msg in user_messages[user]:
 #                self.send(user, user_messages[user][msg])
-            
+
         self.offset += self.recordsperloop
         if self.offset > self.recordcount:
             self.offset = 0
+    
+    def _link_to_msg(self, msg):
+        try:
+            channel = msg['channel']
+        except KeyError, e:
+            if e.message == 'channel':
+                channel = None
+
+        in_reply_to = msg['in_reply_to_status_id']
+        
+        if channel and in_reply_to:
+            url = 'http://www.qaiku.com/channels/show/%s/view/%s/#%s' % (channel, in_reply_to, msg['id'])
+        elif channel:
+            url = 'http://www.qaiku.com/channels/show/%s/view/%s' % (channel, msg['id'])
+        elif in_reply_to:
+            url = '%sshow/%s/#%s' % (msg['user']['url'], in_reply_to, msg['id'])
+        else:
+            url = '%sshow/%s' % (msg['user']['url'], msg['id'])
+                
+        return "[%s](%s)" % (msg['user']['screen_name'], url)
 
 class UNFOLLOW(Command):
     def __init__(self, parent):
@@ -312,3 +477,19 @@ class UNFOLLOW(Command):
             self.reply('Quit following %s for you' % (args[0],))
         else:
             self.reply('You are not following %s' % (args[0],))
+
+class PING(Command):
+    def __init__(self, parent):
+        super(PING, self).__init__(parent)
+        self.usage = '"PING" returns "PONG?" as a confirmation that everything is a-ok.'
+    
+    def run(self, message, *args):
+        self.reply('PONG?')
+
+class HELP(Command):
+    def __init__(self, parent):
+        super(HELP, self).__init__(parent)
+        self.usage = '"HELP" lists the commands available to you.'
+    
+    def run(self, message, *args):
+        self.send(self.sender, self.parent.help)
