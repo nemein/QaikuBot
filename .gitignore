@@ -1,3 +1,4 @@
 *.pyc
 .DS_Store
 qaikubot.ini
+test.db

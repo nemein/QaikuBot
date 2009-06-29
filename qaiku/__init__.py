@@ -37,8 +37,8 @@ class BotMessage(xmppim.MessageProtocol):
         loop = LoopingCall(self.loop)
         loop.start(20, False)
         
-    def connectionMade(self):
-        super(BotMessage, self).connectionMade()
+    def connectionInitialized(self):
+        super(BotMessage, self).connectionInitialized()
 
     def loop(self):
         for key in self.commands:
@@ -80,8 +80,9 @@ class BotPresence(xmppim.PresenceClientProtocol):
     def __init__(self, jid):
         self.jid = jid
     
-    def connectionMade(self):
-        super(BotPresence, self).connectionMade()
+    def connectionInitialized(self):
+        super(BotPresence, self).connectionInitialized()
+        self.available()
     
     def availableReceived(self, entity, show=None, statuses=None, priority=0):
         if self.jid != entity.userhostJID():

@@ -121,7 +121,6 @@ class AUTHORIZE(Command):
         try:
             params = urllib.urlencode({'apikey': args[0]})
             url = 'http://www.qaiku.com/api/statuses/user_timeline.json?%s' % params
-            print url
             req = opener.open(url)
         except urllib2.HTTPError:
             self.reply('Sorry, authorization failed.')
@@ -157,14 +156,17 @@ class FOLLOW(Command):
     def __init__(self, parent):
         super(FOLLOW, self).__init__(parent)
         self.sql('CREATE TABLE IF NOT EXISTS qaikubot_follow (id INTEGER PRIMARY KEY, jid VARCHAR(50), follow_type VARCHAR(50), last_updated INTEGER(11))')
-        self.recordsperloop = 5
+        self.recordsperloop = 10
         self.offset = 0
         self.recordcount = 1
-        self.usage = '"FOLLOW target" adds the target (radar, stream, @nickname, #channel) to your follow list, after which you start to receive Qaikus from the target.'
+        self.usage = '"FOLLOW target" adds the target (radar, stream, @nickname, #channel) to your follow list, after which you start to receive Qaikus from the target. Alternatively, issuing "FOLLOW" without arguments returns your list of FOLLOWs.'
         
     def run(self, message, *args):
         if not args or not args[0]:
-            self.reply('No FOLLOW target given.')
+            values = (self.sender_jid,)
+            self.cursor.execute("SELECT follow_type FROM qaikubot_follow WHERE jid = ? ORDER BY follow_type ASC", values)
+            results = self.cursor.fetchall()
+            self.reply('Your current FOLLOWs are: %s' % (', '.join([follow[0] for follow in results])))
             return None
         
         # See if this already exists
@@ -218,7 +220,6 @@ class FOLLOW(Command):
         user_messages = {}
         
         for follow_type, jid, last_updated in results:
-            print "Looping FOLLOW %s for user %s" % (follow_type, jid)
             apikey = self.get_apikey(jid)
             if apikey is None:
                 print "No API key for user %s" % (jid,)
@@ -243,7 +244,6 @@ class FOLLOW(Command):
                         params = urllib.urlencode({'apikey': apikey, 'since': since})
                         url = 'http://www.qaiku.com/api/statuses/friends_timeline.json?%s' % params
                         req = opener.open(url)
-                        print url
                     else:
                         req = opener.open('http://www.qaiku.com/api/statuses/friends_timeline.json?apikey=%s' % apikey)
                 except urllib2.HTTPError:
@@ -251,8 +251,13 @@ class FOLLOW(Command):
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
                     print "Authorization failed for user %s with API key %s" % (jid,apikey)
                     continue
-
-                messages = json.loads(req.read())
+                
+                try:
+                    messages = json.loads(req.read())
+                except ValueError, e:
+                    print "Looks like there's a problem with the %s API: %s" (follow_type, e.message,)
+                    continue
+                
                 messages.reverse()
                 latestupdate = last_updated
                 for message in messages:
@@ -288,7 +293,6 @@ class FOLLOW(Command):
                         params = urllib.urlencode({'apikey': apikey, 'since': since})
                         url = 'http://www.qaiku.com/api/statuses/mentions.json?%s' % params
                         req = opener.open(url)
-                        print url
                     else:
                         req = opener.open('http://www.qaiku.com/api/statuses/mentions.json?apikey=%s' % apikey)
                 except urllib2.HTTPError:
@@ -297,7 +301,12 @@ class FOLLOW(Command):
                     print "Authorization failed for user %s with API key %s" % (jid,apikey)
                     continue
 
-                messages = json.loads(req.read())
+                try:
+                    messages = json.loads(req.read())
+                except ValueError, e:
+                    print "Looks like there's a problem with the %s API: %s" (follow_type, e.message,)
+                    continue
+                
                 messages.reverse()
                 latestupdate = last_updated
                 for message in messages:
@@ -333,7 +342,6 @@ class FOLLOW(Command):
                         params = urllib.urlencode({'apikey': apikey, 'screen_name': follow_type[1:], 'since': since})
                         url = 'http://www.qaiku.com/api/statuses/user_timeline.json?%s' % params
                         req = opener.open(url)
-                        print url
                     else:
                         params = urllib.urlencode({'apikey': apikey, 'screen_name': follow_type[1:]})
                         url = 'http://www.qaiku.com/api/statuses/user_timeline.json?%s' % params
@@ -343,8 +351,13 @@ class FOLLOW(Command):
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
                     print "Authorization failed for user %s with API key %s" % (jid,apikey)
                     continue
-
-                messages = json.loads(req.read())
+                    
+                try:
+                    messages = json.loads(req.read())
+                except ValueError, e:
+                    print "Looks like there's a problem with the %s API: %s" (follow_type, e.message,)
+                    continue
+                
                 messages.reverse()
                 latestupdate = last_updated
                 for message in messages:
@@ -379,7 +392,6 @@ class FOLLOW(Command):
                         params = urllib.urlencode({'apikey': apikey, 'since': since})
                         url = 'http://www.qaiku.com/api/statuses/channel_timeline/%s.json?%s' % (follow_type[1:], params)
                         req = opener.open(url)
-                        print url
                     else:
                         params = urllib.urlencode({'apikey': apikey })
                         url = 'http://www.qaiku.com/api/statuses/channel_timeline/%s.json?%s' % (follow_type[1:], params)
@@ -390,7 +402,12 @@ class FOLLOW(Command):
                     print "Authorization failed for user %s with API key %s" % (jid,apikey)
                     continue
 
-                messages = json.loads(req.read())
+                try:
+                    messages = json.loads(req.read())
+                except ValueError, e:
+                    print "Looks like there's a problem with the %s API: %s" (follow_type, e.message,)
+                    continue
+
                 messages.reverse()
                 latestupdate = last_updated
                 for message in messages:
@@ -422,8 +439,6 @@ class FOLLOW(Command):
         for user in user_messages:
             for item in sorted(user_messages[user]['order']):
                 self.send(user, user_messages[user]['messages'][item[1]]['plaintext'], user_messages[user]['messages'][item[1]]['markdown'])
-#            for msg in user_messages[user]:
-#                self.send(user, user_messages[user][msg])
 
         self.offset += self.recordsperloop
         if self.offset > self.recordcount:
@@ -478,6 +493,7 @@ class PING(Command):
     
     def run(self, message, *args):
         self.reply('PONG?')
+        
 
 class HELP(Command):
     def __init__(self, parent):
