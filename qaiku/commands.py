@@ -263,6 +263,8 @@ class FOLLOW(Command):
                 messages.reverse()
                 latestupdate = last_updated
                 for message in messages:
+                    if not message['user']:
+                        continue
                     markdown_username = self._link_to_msg(message)
                     markdownized = "%s: %s" % (markdown_username, message['text'])
                     plaintext = "%s: %s" % (message['user']['screen_name'], message['text'])
@@ -454,9 +456,6 @@ class FOLLOW(Command):
                 channel = None
 
         in_reply_to = msg['in_reply_to_status_id']
-        
-        print "Debug: _link_to_msg"
-        print msg
         
         if channel and in_reply_to:
             url = 'http://www.qaiku.com/channels/show/%s/view/%s/#%s' % (channel, in_reply_to, msg['id'])
