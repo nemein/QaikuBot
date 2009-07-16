@@ -314,6 +314,8 @@ class FOLLOW(Command):
                 messages.reverse()
                 latestupdate = last_updated
                 for message in messages:
+                    if not message['user']:
+                        continue
                     markdown_username = self._link_to_msg(message)
                     markdownized = "%s: %s" % (markdown_username, message['text'])
                     plaintext = "%s: %s" % (message['user']['screen_name'], message['text'])
@@ -365,6 +367,8 @@ class FOLLOW(Command):
                 messages.reverse()
                 latestupdate = last_updated
                 for message in messages:
+                    if not message['user']:
+                        continue
                     markdown_username = self._link_to_msg(message)
                     markdownized = "%s: %s" % (markdown_username, message['text'])
                     plaintext = "%s: %s" % (message['user']['screen_name'], message['text'])
@@ -415,6 +419,8 @@ class FOLLOW(Command):
                 messages.reverse()
                 latestupdate = last_updated
                 for message in messages:
+                    if not message['user']:
+                        continue
                     markdown_username = self._link_to_msg(message)
                     markdownized = "%s: %s" % (markdown_username, message['text'])
                     plaintext = "%s: %s" % (message['user']['screen_name'], message['text'])
