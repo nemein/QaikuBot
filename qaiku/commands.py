@@ -249,7 +249,9 @@ class FOLLOW(Command):
                 except urllib2.HTTPError:
                     # Authorization failed for user, complain?
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
-                    print "Authorization failed for user %s with API key %s" % (jid,apikey)
+                    print "Authorization failed for user %s with API key %s on FOLLOW %s" % (jid,apikey,follow_type)
+                    plaintext_reply = "Sorry, your FOLLOW for %s could not be read, this is probably due to bad apikey." % (follow_type)
+                    self.send(jid, plaintext_reply)
                     continue
                 
                 try:
@@ -452,6 +454,9 @@ class FOLLOW(Command):
                 channel = None
 
         in_reply_to = msg['in_reply_to_status_id']
+        
+        print "Debug: _link_to_msg"
+        print msg
         
         if channel and in_reply_to:
             url = 'http://www.qaiku.com/channels/show/%s/view/%s/#%s' % (channel, in_reply_to, msg['id'])
