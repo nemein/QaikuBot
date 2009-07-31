@@ -249,7 +249,7 @@ class FOLLOW(Command):
                 except urllib2.HTTPError, e:
                     # Authorization failed for user, complain?
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
-                    print "STREAM Authorization failed for user %s with API key %s on FOLLOW %s" % (jid,apikey,follow_type)
+                    print "STREAM Authorization failed for user %s with API key %s on FOLLOW %s (HTTP Error %s)" % (jid,apikey,follow_type,e.code)
                     plaintext_reply = "Sorry, your FOLLOW for %s could not be read, this is probably due to bad apikey." % (follow_type)
                     self.send(jid, plaintext_reply)
                     continue
@@ -302,7 +302,7 @@ class FOLLOW(Command):
                 except urllib2.HTTPError, e:
                     # Authorization failed for user, complain?
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
-                    print "RADAR Authorization failed for user %s with API key %s (%s %s)" % (jid,apikey,e.code,e.reason)
+                    print "RADAR Authorization failed for user %s with API key %s (HTTP Error %s)" % (jid,apikey,e.code)
                     continue
 
                 try:
@@ -355,7 +355,7 @@ class FOLLOW(Command):
                 except urllib2.HTTPError, e:
                     # Authorization failed for user, complain?
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
-                    print "@username Authorization failed for user %s with API key %s (%s %s)" % (jid,apikey,e.code,e.reason)
+                    print "@username Authorization failed for user %s with API key %s (HTTP Error %s)" % (jid,apikey,e.code)
                     continue
                     
                 try:
@@ -407,7 +407,7 @@ class FOLLOW(Command):
                 except urllib2.HTTPError, e:
                     # Authorization failed for user, complain?
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
-                    print "#channel Authorization failed for user %s with API key %s (%s %s)" % (jid,apikey,e.code,e.reason)
+                    print "#channel Authorization failed for user %s with API key %s (HTTP Error %s)" % (jid,apikey,e.code)
                     continue
 
                 try:
