@@ -122,7 +122,7 @@ class AUTHORIZE(Command):
             params = urllib.urlencode({'apikey': args[0]})
             url = 'http://www.qaiku.com/api/statuses/user_timeline.json?%s' % params
             req = opener.open(url)
-        except urllib2.HTTPError:
+        except urllib2.HTTPError, e:
             self.reply('Sorry, authorization failed.')
             return None
 
@@ -191,7 +191,7 @@ class FOLLOW(Command):
                     params = urllib.urlencode({'apikey': apikey, 'screen_name': follow_type[1:]})
                     url = 'http://www.qaiku.com/api/statuses/user_timeline.json?%s' % params
                     req = opener.open(url)
-                except urllib2.HTTPError:
+                except urllib2.HTTPError, e:
                     # Authorization failed for user, complain?
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
                     self.reply('User %s does not exist.' % follow_type[1:])
@@ -246,10 +246,10 @@ class FOLLOW(Command):
                         req = opener.open(url)
                     else:
                         req = opener.open('http://www.qaiku.com/api/statuses/friends_timeline.json?apikey=%s' % apikey)
-                except urllib2.HTTPError:
+                except urllib2.HTTPError, e:
                     # Authorization failed for user, complain?
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
-                    print "Authorization failed for user %s with API key %s on FOLLOW %s" % (jid,apikey,follow_type)
+                    print "STREAM Authorization failed for user %s with API key %s on FOLLOW %s" % (jid,apikey,follow_type)
                     plaintext_reply = "Sorry, your FOLLOW for %s could not be read, this is probably due to bad apikey." % (follow_type)
                     self.send(jid, plaintext_reply)
                     continue
@@ -299,10 +299,10 @@ class FOLLOW(Command):
                         req = opener.open(url)
                     else:
                         req = opener.open('http://www.qaiku.com/api/statuses/mentions.json?apikey=%s' % apikey)
-                except urllib2.HTTPError:
+                except urllib2.HTTPError, e:
                     # Authorization failed for user, complain?
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
-                    print "Authorization failed for user %s with API key %s" % (jid,apikey)
+                    print "RADAR Authorization failed for user %s with API key %s (%s %s)" % (jid,apikey,e.code,e.reason)
                     continue
 
                 try:
@@ -352,10 +352,10 @@ class FOLLOW(Command):
                         params = urllib.urlencode({'apikey': apikey, 'screen_name': follow_type[1:]})
                         url = 'http://www.qaiku.com/api/statuses/user_timeline.json?%s' % params
                         req = opener.open(url)
-                except urllib2.HTTPError:
+                except urllib2.HTTPError, e:
                     # Authorization failed for user, complain?
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
-                    print "Authorization failed for user %s with API key %s" % (jid,apikey)
+                    print "@username Authorization failed for user %s with API key %s (%s %s)" % (jid,apikey,e.code,e.reason)
                     continue
                     
                 try:
@@ -404,10 +404,10 @@ class FOLLOW(Command):
                         params = urllib.urlencode({'apikey': apikey })
                         url = 'http://www.qaiku.com/api/statuses/channel_timeline/%s.json?%s' % (follow_type[1:], params)
                         req = opener.open(url)
-                except urllib2.HTTPError:
+                except urllib2.HTTPError, e:
                     # Authorization failed for user, complain?
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
-                    print "Authorization failed for user %s with API key %s" % (jid,apikey)
+                    print "#channel Authorization failed for user %s with API key %s (%s %s)" % (jid,apikey,e.code,e.reason)
                     continue
 
                 try:
