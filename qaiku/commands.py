@@ -104,6 +104,8 @@ class default(Command):
             response = req.read()
         except urllib2.HTTPError, e:
             print "Updating failed for user %s, HTTP %s" % (self.sender_jid, e.code)
+        except urllib2.URLError, e:
+            print "Connection failed for user %s, error %s" % (self.sender_jid, e.message)
     
 class AUTHORIZE(Command):
     def __init__(self, parent):
@@ -124,6 +126,10 @@ class AUTHORIZE(Command):
             req = opener.open(url)
         except urllib2.HTTPError, e:
             self.reply('Sorry, authorization failed.')
+            return None
+        except urllib2.URLError, e:
+            print "Connection failed, error %s" % (e.message)
+            self.reply("Connection failed, error %s. Try again later" % (e.message))
             return None
 
         results = req.read() 
@@ -196,6 +202,11 @@ class FOLLOW(Command):
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
                     self.reply('User %s does not exist.' % follow_type[1:])
                     return None
+                except urllib2.URLError, e:
+                    print "Connection failed, error %s" % (e.message)
+                    self.reply("Connection failed, error %s. Try again later" % (e.message))
+                    return None
+
                     
                 if req.read() == '[]':
                     self.reply("%s's feed is private and therefore cannot be followed." % (follow_type[1:],))
@@ -253,6 +264,11 @@ class FOLLOW(Command):
                     plaintext_reply = "Sorry, your FOLLOW for %s could not be read, this is probably due to bad apikey." % (follow_type)
                     self.send(jid, plaintext_reply)
                     continue
+                except urllib2.URLError, e:
+                    print "Connection failed, error %s" % (e.message)
+                    self.reply("Connection failed, error %s. Try again later" % (e.message))
+                    return None
+
                 
                 try:
                     messages = json.loads(req.read())
@@ -303,6 +319,9 @@ class FOLLOW(Command):
                     # Authorization failed for user, complain?
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
                     print "RADAR Authorization failed for user %s with API key %s (HTTP Error %s)" % (jid,apikey,e.code)
+                    continue
+                except urllib2.URLError, e:
+                    print "Connection failed, error %s" % (e.message)
                     continue
 
                 try:
@@ -357,6 +376,9 @@ class FOLLOW(Command):
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
                     print "@username Authorization failed for user %s with API key %s (HTTP Error %s)" % (jid,apikey,e.code)
                     continue
+                except urllib2.URLError, e:
+                    print "Connection failed, error %s" % (e.message)
+                    continue
                     
                 try:
                     messages = json.loads(req.read())
@@ -408,6 +430,9 @@ class FOLLOW(Command):
                     # Authorization failed for user, complain?
                     # TODO: deactivate all subscriptions for the user until he reauthorizes
                     print "#channel Authorization failed for user %s with API key %s (HTTP Error %s)" % (jid,apikey,e.code)
+                    continue
+                except urllib2.URLError, e:
+                    print "Connection failed, error %s" % (e.message)
                     continue
 
                 try:
