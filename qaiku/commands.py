@@ -521,6 +521,36 @@ class UNFOLLOW(Command):
         else:
             self.reply('You are not following %s' % (args[0],))
 
+class LOCATION(Command):
+    def __init__(self, parent):
+        super(LOCATION, self).__init__(parent)
+        self.usage = '"LOCATION placename, city, country" updates your Qaiku location to a given spot.'
+
+    def run(self, message, *args):
+        apikey = self.get_apikey()
+        if apikey is None:
+            print "No API key for user %s" % (self.sender_jid,)
+            return None
+        
+        msg = unicode(message.body)
+        location = msg.replace('LOCATION ', '')
+
+        opener = urllib2.build_opener()
+        opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
+        try:
+            data = urllib.urlencode({'location': unicode(location).encode('utf-8')})
+            params = urllib.urlencode({'apikey': apikey})
+            url = 'http://www.qaiku.com/api/account/update_profile.json?%s' % params
+            req = opener.open(url, data)
+            response = req.read()
+        except urllib2.HTTPError, e:
+            print "Updating failed for user %s, HTTP %s" % (self.sender_jid, e.code)
+            return None
+        except urllib2.URLError, e:
+            print "Connection failed for user %s, error %s" % (self.sender_jid, e.message)
+            return None
+        self.reply("Location updated to '%s'" % (location,))
+
 class PING(Command):
     def __init__(self, parent):
         super(PING, self).__init__(parent)
