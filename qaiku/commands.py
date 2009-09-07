@@ -392,7 +392,7 @@ class FOLLOW(Command):
                     try:
                         if not message['user']:
                             continue
-                    except NameError:
+                    except KeyError:
                         continue
                     markdown_username = self._link_to_msg(message)
                     markdownized = "%s: %s" % (markdown_username, message['text'])
