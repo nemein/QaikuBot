@@ -95,7 +95,7 @@ class default(Command):
         opener.addheaders = [('User-agent', 'QaikuBot/0.1')]
         try:
             data = urllib.urlencode({'status': unicode(message).encode('utf-8')})
-            params = urllib.urlencode({'apikey': apikey})
+            params = urllib.urlencode({'apikey': apikey, 'source': 'qaikubot'})
             if reply_to is not None:
                 data = urllib.urlencode({'status': unicode(message).encode('utf-8'), 'in_reply_to_status_id': reply_to })
         
