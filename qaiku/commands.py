@@ -85,6 +85,7 @@ class default(Command):
             except KeyError:
                 self.reply("It appears I have no recollection of Qaikus from %s before, so I am sending your message along as new Qaiku." % username)
                 self._publish(apikey, msg)
+                return None
             
             self._publish(apikey, msg, reply_to=as_reply_to)
         else:

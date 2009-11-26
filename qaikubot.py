@@ -12,6 +12,7 @@ config.read('qaikubot.ini')
 
 myjid = JID(config.get('qaikubot', 'jid'))
 password = config.get('qaikubot', 'password')
+apiurl = config.get('qaikubot', 'apiurl')
 
 application = service.Application('QaikuBot')
 xmppClient = client.XMPPClient(myjid, password)
@@ -22,4 +23,5 @@ presence = BotPresence(myjid)
 presence.setHandlerParent(xmppClient)
 
 messages = BotMessage(myjid)
+messages.setApiUrl(apiurl)
 messages.setHandlerParent(xmppClient)

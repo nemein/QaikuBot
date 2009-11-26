@@ -36,7 +36,10 @@ class BotMessage(xmppim.MessageProtocol):
         self.help = "\n".join(USAGE)
         loop = LoopingCall(self.loop)
         loop.start(20, False)
-        
+
+    def setApiUrl(self, apiurl):
+        self.apiurl = apiurl
+
     def connectionInitialized(self):
         super(BotMessage, self).connectionInitialized()
 
