@@ -442,7 +442,7 @@ class FOLLOW(Command):
                 try:
                     messages = json.loads(req.read())
                 except ValueError, e:
-                    print "Looks like there's a problem with the %s API: %s" (follow_type, e.message,)
+                    print "Looks like there's a problem with the %s API" (follow_type,)
                     continue
 
                 messages.reverse()
